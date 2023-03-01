@@ -1,0 +1,290 @@
+---
+title: "Star Wars"
+execute:
+    warning: false
+subtitle: "Course DS 250"
+author: "Spencer Driggs"
+format:
+  html:
+    self-contained: true
+    page-layout: full
+    title-block-banner: true
+    toc: true
+    toc-depth: 3
+    toc-location: body
+    number-sections: false
+    html-math-method: katex
+    code-fold: true
+    code-summary: "Show the code"
+    code-overflow: wrap
+    code-copy: hover
+    code-tools:
+        source: false
+        toggle: true
+        caption: See code
+    
+---
+
+```{python}
+#| label: libraries
+#| include: false
+import pandas as pd
+import altair as alt
+import numpy as np
+import string as str
+
+from IPython.display import Markdown
+from IPython.display import display
+from tabulate import tabulate
+from sklearn.naive_bayes import GaussianNB
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import train_test_split 
+from sklearn import metrics
+from sklearn import tree
+import matplotlib
+
+from sklearn.metrics import classification_report
+from IPython.display import Markdown
+from IPython.display import display
+from tabulate import tabulate
+```
+
+
+## Elevator pitch
+
+Alright, now that Andor Season 1 has finished, we have to keep planning the next series. We've got lots of characters across the main movies, and a mixed bag of results with Mandalorian (good reviews) and Kenobi (bad reviews). Who should we focus on next? Who needs their own side story? Let's dig into this audience survey and find out.
+
+```{python}
+#| label: project data
+#| code-summary: Read in project data
+# Include and execute your code here
+swAnswer = pd.read_csv('https://raw.githubusercontent.com/fivethirtyeight/data/master/star-wars-survey/StarWars.csv',encoding_errors='ignore',header=None,skiprows=2)
+swCol = pd.read_csv('https://raw.githubusercontent.com/fivethirtyeight/data/master/star-wars-survey/StarWars.csv',encoding_errors='ignore',header=None,nrows=2)
+```
+
+
+## The First: Order
+
+__Shorten the column names and clean them up for easier use with pandas. Provide a table or list that exemplifies how you fixed the names.__
+
+Unfortunately, our survey info is split across multiple headers, lots of spaces, and titles that are way too long! As I shortened them, I made phrases that could be answered with a binary Yes/No answer, like "Which movie have you seen" Became SeenEp1, SeenEp2, etc.
+
+```{python}
+#| label: Format Columns
+#| code-summary: Formatting Column Names
+# Include and execute your code here
+swCol[9]=swCol[9].str.strip('?').str.replace('Please rank the Star Wars films in order of preference with 1 being your favorite film in the franchise and 6 being your least favorite film.','Preference')
+swCol[1]=swCol[1].str.strip('?').str.replace('Have you seen any of the 6 films in the Star Wars franchise','SeenAny')
+swCol[2]=swCol[2].str.strip('?').str.replace('Do you consider yourself to be a fan of the Star Wars film franchise','IsFan')
+swCol[3]=swCol[3].str.replace('^.*$','Seen',regex=True) ##Fix
+swCol[15]=swCol[15].str.replace('Please state whether you view the following characters favorably, unfavorably, or are unfamiliar with him/her.','Favorable_')
+swCol[29]=swCol[29].str.strip('?').str.replace('Which character shot first?','HanShot')
+swCol[30]=swCol[30].str.strip('?').str.replace('Are you familiar with the Expanded Universe?','EUFamiliar')
+swCol[31]=swCol[31].str.strip('?').str.replace('Do you consider yourself to be a fan of the Expanded Universe?','EUFan')
+swCol[32]=swCol[32].str.strip('?').str.replace('Do you consider yourself to be a fan of the Star Trek franchise?','Startrek')
+
+swCol.ffill()
+swCol[0].na_rep = "NA"
+for x in range(3,15):
+    swCol[x] = (swCol[x].str.strip().str.replace('Star Wars: Episode I  The Phantom Menace','Ep1')
+    .str.replace('Star Wars: Episode II  Attack of the Clones','Ep2')
+    .str.replace('Star Wars: Episode III  Revenge of the Sith','Ep3')
+    .str.replace('Star Wars: Episode IV  A New Hope','Ep4')
+    .str.replace('Star Wars: Episode V The Empire Strikes Back','Ep5')
+    .str.replace('Star Wars: Episode VI Return of the Jedi','Ep6')
+)
+for x in range(15,29):
+    swCol[x]=swCol[x].str.strip().str.replace(' ','')
+swCol[35]=swCol[35].str.replace(' ','')
+swCol[37]=swCol[37].str.replace('\(.*$','').str.strip()
+swCol.iloc[1]=swCol.iloc[1].ffill().str.replace('Response','')
+swCol.iloc[0]=swCol.iloc[0].ffill()
+Markdown(swCol.to_markdown(index=False))
+```
+
+
+## Row-2 D-2
+
+__Clean and format the data so that it can be used in a machine learning model. As you format the data, you should complete each item listed below. In your final report provide example(s) of the reformatted data with a short description of the changes made.__
+
+Several responses needed to be adjusted. Using regular expressions I split the age and income columns to just one number, making them easier to categorize. The ratings of characters is on a scale from 0 to 5, with 5 being favorable and 0 being unknown.
+
+
+```{python}
+#| label: Format Rows
+#| code-summary: Formatting Row Responses
+# Include and execute your code here
+for x in range(15,29):
+    swAnswer[x] = (swAnswer[x].str.replace('Very favorably','5')
+    .str.replace('Somewhat favorably','4')
+    .str.replace('^N.*$','3',regex=True)
+    .str.replace('Somewhat unfavorably','2')
+    .str.replace('Very unfavorably','1')
+    .str.replace('^U.*$','0',regex=True)
+    #
+)
+    #change to integers, fix missing values
+swAnswer[29] = swAnswer[29].str.replace('I don\'t understand this question','eithershot')
+
+
+for x in range(3,9):
+    swAnswer[x] = (swAnswer[x].str.replace('Star Wars: Episode I  The Phantom Menace','ep1')
+    .str.replace('Star Wars: Episode II  Attack of the Clones','ep2')
+    .str.replace('Star Wars: Episode III  Revenge of the Sith','ep3')
+    .str.replace('Star Wars: Episode IV  A New Hope','ep4')
+    .str.replace('Star Wars: Episode V The Empire Strikes Back','ep5')
+    .str.replace('Star Wars: Episode VI Return of the Jedi','ep6')
+)
+
+    
+swAnswer[35]=(swAnswer[35].dropna()
+    .str.replace(',','')
+    .str.replace('+','')
+    .str.replace('$','')
+    .str.replace('\s\-\s\d*$','',regex=True)
+        #everything after the first number
+    .astype('int')
+) 
+
+swAnswer[34]=swAnswer[34].str.replace('\d*[->]','',regex=True)
+
+swAnswer[36]=(swAnswer[36]
+    .str.replace('^.*A','A',regex=True)
+    .str.replace('degree','')
+    .str.upper()
+    .str.replace(' ','')
+)
+Markdown(swAnswer.sample(n=10).to_markdown(index=False))
+```
+
+Once the columns were more easily formatted, I combined the headers with the rows, and expanded out the qualitative entries so they could be read numerically. Each of the Region, Income, and Education responses were split into its own column. 
+```{python}
+#| label: Recombine & Dummy Columns 
+#| code-summary: Combining Together
+# Include and execute your code here
+newHeader = []
+for x in range(38):
+    #newHeader.append(
+    newpiece = pd.Series([swCol.iat[0,x],swCol.iat[1,x]])
+    newHeader.append(newpiece.str.cat(na_rep = "NA"))
+
+swAnswer.columns=newHeader
+#swAnswer['Over50K']=np.where(swAnswer['HouseholdIncome']>=50000,1,0)
+#double check, should be moved
+
+shot_first_onehot = pd.get_dummies(swAnswer['HanShot'])
+#swAnswer['Han'],swAnswer['eithershot'] = pd.get_dummies(swAnswer['HanShot'], drop_first=True)
+swAnswer['Hanfirst'] = shot_first_onehot['Han']
+swAnswer['Greedofirst'] = shot_first_onehot['Greedo']
+
+swAnswer['Location']=swAnswer['Location'].str.replace(' ','')
+location_onehot= pd.get_dummies(swAnswer['Location'],drop_first=True)
+for x in location_onehot.columns:
+    swAnswer[x]=location_onehot[x]
+
+ed_oh=pd.get_dummies(swAnswer['Education'],drop_first=True)
+for x in ed_oh.columns:
+    swAnswer[x]=ed_oh[x] 
+
+for x in ['SeenAny','IsFan','EUFamiliar', 'EUFan', 'Startrek', 'Gender']:
+    swAnswer[x]=pd.get_dummies(swAnswer[x],drop_first=True)
+swAnswer['IsMale']=pd.get_dummies(swAnswer['Gender'],drop_first=True)
+#Need the same thing for the seen categories
+#prob too many columns
+Markdown(swAnswer[swAnswer.SeenAny==1].sample(n=10).to_markdown(index=False))
+```
+
+## Execute Order 538
+
+__Validate that the data provided on GitHub lines up with the article by recreating 2 of the visuals from the article.__
+
+With our new filtered, cleaned Star Wars information, we can see what people know about the franchise and who they like. 
+
+Fun fact, people still like Luke! Maybe this has shifted a little since *The Last Jedi*, but I bet this was the original graphic that led to his inclusion in the sequel trilogy.
+```{python}
+#| label: Luke's Favorability
+#| code-summary: Luke's Rating
+# Include and execute your code here
+likeLuke = swAnswer['Favorable_LukeSkywalker'].value_counts().rename_axis('unique_values').reset_index(name='Count')
+likeLuke
+
+likeLuke['Percent']=likeLuke['Count']/sum(likeLuke['Count'])
+luke2 = pd.DataFrame({
+        'Favoring':['Favorable','Neutral','Unfavorable','Unfamiliar'],
+        'Percent':[likeLuke['Percent'].iloc[0]+likeLuke['Percent'].iloc[1],likeLuke['Percent'].iloc[2],likeLuke['Percent'].iloc[3]+likeLuke['Percent'].iloc[5],likeLuke['Percent'].iloc[4]]
+})
+lukeChart = (alt.Chart(luke2)
+    .encode(x=alt.X('Favoring'),
+            y=alt.Y('Percent',axis=alt.Axis(format='%',title='Percentage'))
+    )
+    .properties(title="People Like Luke")
+    .mark_bar(color='blue')
+)
+lukeChart
+```
+
+We can also see that most people still agree that Han shot Greedo first. In that case, we should avoid anything in the new series that rewrites earlier parts of the movies.
+
+```{python}
+#| label: Who Shot First?
+#| code-summary: Han/Greedo Feud
+# Include and execute your code here
+shots = swAnswer['HanShot'].value_counts().rename_axis('unique_values').reset_index(name='Count')
+shotssum = len(swAnswer['HanShot'].dropna())
+shots['Percent']=shots['Count']/shotssum
+
+shotChart = (alt.Chart(shots)
+    .encode(y=alt.Y('unique_values'),
+    x=alt.X('Percent',axis=alt.Axis(format='%'))
+    )
+    .mark_bar(color='blue')
+    .properties(title='Who Shot First?')
+)
+shotChart
+```
+
+
+## GRAND Moff Tarkin
+
+__Build a machine learning model that predicts whether a person makes more than $50k. Describe your model and report the accuracy.__
+
+Now that we have our information, we can use this black box to help us understand our market audience perfectly. Boy, I'm sure glad that our fanbase is pretty similar: could you imagine if half of them hated The Last Jedi and the other half loved it?? That would be so difficult to navigate.
+
+*(Note to Editor: When building our machine learning algorithm, we only used the survey information that had basically nothing to do with which movies or characters people know. Don't tell George Lucas, ok?)*
+
+```{python}
+#| label: Machine Learning
+#| code-summary: ML Accuracy
+# Include and execute your code here
+swML=swAnswer.dropna()
+swML['Over50K']=np.where(swML['HouseholdIncome']>=50000,1,0)
+features = swML[['IsFan','Hanfirst',
+       'Greedofirst', 'EastSouthCentral', 'MiddleAtlantic', 'Mountain',
+       'NewEngland', 'Pacific', 'SouthAtlantic', 'WestNorthCentral',
+       'WestSouthCentral', 'IsMale', 'BACHELOR', 'GRADUATE',
+       'HIGHSCHOOL', 'LESSTHANHIGHSCHOOL','EUFamiliar', 'EUFan', 'Startrek','Age']]
+targets = swML['Over50K']
+x_train, x_test, y_train, y_test = train_test_split(features, targets, test_size = .33, random_state = 14)
+
+DT_model = DecisionTreeClassifier(max_depth = 5)
+DT_model.fit(x_train,y_train)
+DT_predict = DT_model.predict(x_test)
+print('Accuracy: ', metrics.accuracy_score(y_test, DT_predict))
+```
+
+In the chart below we can see how important different variables were. It looks like being a Star Trek fan tells us more about these people than if they're a Star Wars fan. I don't know if that's good news or bad news. Regardless, I bet J.J. Abrams would get a kick out of that. Maybe he'll direct a crossover series for us!
+
+```{python}
+#| label: Machine Learning Metrics
+#| code-summary: Feature Importance
+DT_model.feature_importances_
+features_df = pd.DataFrame({'features':x_test.columns,'importance':DT_model.feature_importances_})
+ImportantChart = alt.Chart(features_df).encode(
+    x=alt.X('features',sort='-y',axis=alt.Axis(title='What Features?')),
+    y=alt.Y('importance',axis=alt.Axis(title='How Impactful Were they?',format='%')),
+).mark_bar().properties(title='The Resistance')
+ImportantChart
+```
+

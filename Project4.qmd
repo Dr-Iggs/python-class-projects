@@ -1,0 +1,192 @@
+---
+title: "House of Leaves"
+subtitle: "Course DS 250"
+author: "Spencer Driggs, Zampano, Mark Danielewski"
+format:
+  html:
+    self-contained: true
+    page-layout: full
+    title-block-banner: true
+    toc: true
+    toc-depth: 3
+    toc-location: body
+    number-sections: false
+    html-math-method: katex
+    code-fold: true
+    code-summary: "Show the code"
+    code-overflow: wrap
+    code-copy: hover
+    code-tools:
+        source: false
+        toggle: true
+        caption: See code
+    
+---
+
+```{python}
+#| label: libraries
+#| include: false
+import altair as alt
+import pandas as pd
+import seaborn as sns
+import numpy as np
+from sklearn.naive_bayes import GaussianNB
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import train_test_split 
+from sklearn import metrics
+from sklearn import tree
+import matplotlib
+
+from sklearn.metrics import classification_report
+from IPython.display import Markdown
+from IPython.display import display
+from tabulate import tabulate
+```
+
+
+## Elevator pitch
+
+*“We all create stories to protect ourselves.”*
+
+-Mark Z. Danielewski, <span style="color:blue;">House</span> of Leaves
+
+Asbestos? Not a fan! It used to be all the rage in the mid-20th century as a cure-all and building material, and people made some serious money advertising its benefits and neglecting to study its other consequences. Once people started living around the stuff, it created serious health hazards. People don't built with it anymore, but there may still be <span style="color:blue;">homes</span> on the market that are unknowingly built with asbestos material. Let's predict which ones are as-best-os we can!
+
+![](https://www.asbestos.com/wp-content/uploads/xjohns-manville-pamphlet.jpg.pagespeed.ic.L4y7ZxvFch.jpg)
+
+```{python}
+#| label: project data
+#| code-summary: Read and format project data
+# Include and execute your code here
+dwellml = pd.read_csv('https://raw.githubusercontent.com/byuidatascience/data4dwellings/master/data-raw/dwellings_ml/dwellings_ml.csv')
+
+dwellden = pd.read_csv('https://raw.githubusercontent.com/byuidatascience/data4dwellings/master/data-raw/dwellings_denver/dwellings_denver.csv')
+
+parcel = pd.read_csv('https://raw.githubusercontent.com/byuidatascience/data4dwellings/master/data-raw/dwellings_neighborhoods_ml/dwellings_neighborhoods_ml.csv')
+
+df2 = pd.merge(dwellml,parcel[['parcel','nbhd_1','nbhd_2','nbhd_3','nbhd_4','nbhd_5']],how='left',on='parcel')
+```
+
+## The <span style="color:blue;">House</span> on Ash Tree Lane
+
+__Create 2-3 charts that evaluate potential relationships between the <span style="color:blue;">home</span> variables and before1980. Explain what you learn from the charts that could help a machine learning algorithm.__
+
+*"'How is the <span style="color:blue;">house</span> bigger on the inside than the outside?'"*
+-Mark Z. Danielewski, <span style="color:blue;">House</span> of Leaves 
+
+```{python}
+#| label: Bathrooms to Year
+#| code-summary: Read and format data
+# Include and execute your code here
+bathChart = alt.Chart(dwellden.sample(n=1500)).encode(
+    x=alt.X('numbaths',axis=alt.Axis(title='Number of Bathrooms'),scale=alt.Scale(domain=(1,9))),
+    y=alt.Y('yrbuilt',axis=alt.Axis(title='.',format='d'),scale=alt.Scale(domain=(1860,2020)))    
+).properties(title='More Bathrooms = More Newer!').mark_boxplot()
+
+line2 = pd.DataFrame({'x':[0,9],'y':[1980,1980]})
+my_line2 = (alt.Chart(line2)
+  .encode(
+    x=alt.X('x',scale=alt.Scale(domain=(1,9))),
+    y=alt.Y('y'),
+  )
+  .mark_line(color='black'))
+bathChart + my_line2
+
+
+```
+
+There's a few types of <span style="color:blue;">houses</span> that give us a pretty solid guess as to their year. Overall the more bathrooms it has, the more likely it is to be built recently. A majority of <span style="color:blue;">houses</span> with 4 or more are built after 1980, which can help us narrow down our asbestos search.
+
+```{python}
+#| label: Floors to Year
+#| code-summary: Read and format data
+# Include and execute your code here
+storyChart = alt.Chart(dwellden.sample(n=1500)).encode(
+    x=alt.X('stories',axis=alt.Axis(title='Number of Floors'),scale=alt.Scale(domain=(1,4))),
+    y=alt.Y('yrbuilt',axis=alt.Axis(title='.',format='d'),scale=alt.Scale(domain=(1860,2020)))    
+).properties(title='More Floors are Recent').mark_boxplot()
+
+line3 = pd.DataFrame({'x':[0,4],'y':[1980,1980]})
+my_line3 = (alt.Chart(line3)
+  .encode(
+    x=alt.X('x',scale=alt.Scale(domain=(1,4))),
+    y=alt.Y('y'),
+  )
+  .mark_line(color='black'))
+storyChart + my_line3
+```
+
+Similarly to bathrooms, the number of floors can also be a good predictor. Older <span style="color:blue;">houses</span> tend to be smaller, judging by the medians of our boxplots. These two also probably correlate, because who needs 6 bathrooms when you only have one floor!
+
+
+## 5 1/2 Minute Hallway
+
+__Build a classification model labeling <span style="color:blue;">house</span> as being built “before 1980” or “during or after 1980”. Your goal is to reach or exceed 90% accuracy. Explain your final model choice (algorithm, tuning parameters, etc) and describe what other models you tried.__
+
+*“What miracle is this? This giant tree.*
+
+*It stands ten thousand feet high but doesn't reach the ground.*
+
+*Still it stands.*
+
+*Its roots must hold the sky.”*
+-Mark Z. Danielewski, <span style="color:blue;">House</span> of Leaves 
+
+I tried the Boost model, but it took a lot longer to run and ultimately gave me slightly weaker results than just our basic Decision Tree classifier.
+
+My model uses a few variables from most of the categories available. There are some about the <span style="color:blue;">house</span> features, like garage, living space, stories. I also used the condition of the <span style="color:blue;">house</span> (Fair, Good) and the neighborhood it was in.
+
+With 20 total variables, I tried to keep the depth of our classifier to below that amount, ending at 14 as my best indicator.
+
+
+```{python}
+#| label: The House of Tree
+#| code-summary: plot example
+# Include and execute your code here
+features = df2.filter(['numbaths','stories','livearea','arstyle_CONVERSIONS','sprice','totunits','nocars','numbdrm','conditionGood','conditionFair','condition_AVG','gartype_Att','gartype_Det','gartype_None','quality_C','deduct','netprice','tasp','nbhd_1','nbhd_2','nbhd_3','nbhd_4','nbhd_5'])
+targets = df2.before1980
+train_data, test_data, train_targets, test_targets = train_test_split(features, targets, test_size=.34, random_state = 80)
+
+classifier_DT = DecisionTreeClassifier(max_depth = 14)
+classifier_DT.fit(train_data, train_targets)
+y_predicted_DT = classifier_DT.predict(test_data)
+print("Accuracy:", metrics.accuracy_score(test_targets, y_predicted_DT))
+```
+
+
+## "Exploration A'
+
+__Justify your classification model by discussing the most important features selected by your model. This discussion should include a chart and a description of the features.__
+
+*“...the finest act of seeing is necessarily always the act of not seeing something else.”*
+ 
+-Mark Danielewski, <span style="color:blue;">House</span> of Leaves 
+```{python}
+#| label: What's Important
+#| code-summary: table example
+#| tbl-cap-location: top
+# Include and execute your code here
+classifier_DT.feature_importances_
+features_df = pd.DataFrame({'features':test_data.columns,'importance':classifier_DT.feature_importances_})
+ImportantChart = alt.Chart(features_df).encode(
+    x=alt.X('features',sort='-y',axis=alt.Axis(title='What Features?')),
+    y=alt.Y('importance',axis=alt.Axis(title='How Impactful Were they?',format='%')),
+).mark_bar().properties(title='What\'s our Dream Home?')
+ImportantChart
+```
+
+I was surprised by how much of an impact the number of stories had on when the <span style="color:blue;">house</span> was built. Such a simple metric could do a pretty good job on its own. Between the different garage metrics, I wasn't too surprised by its impact, because the way Americans treat and see their cars (as well as the way cities are built to accomodate them) has changed a lot in the past several decades. 
+We also saw that neighborhoods (nbhd_1, nbhd_2, etc) had a big imapct. My family's current <span style="color:blue;">house</span> in Arizona is an old farm lot, and the rest of the town has slowly built up around these old, large lots. All the <span style="color:blue;">houses</span> in our neighborhood were built around the same time, so we can expect a correlation between the <span style="color:blue;">houses</span>.
+
+## "This is not for you."
+__Describe the quality of your classification model using 2-3 different evaluation metrics. You also need to explain how to interpret each of the evaluation metrics you use.__
+
+*"He turned to find himself staring at a new wall: concrete, grey, suffocating. The labyrinth was alive, and it had been disturbed."*
+-Mark Z. Danielewski, <span style="color:blue;">House</span> of Leaves 
+```{python}
+print(pd.crosstab(test_targets, y_predicted_DT, rownames=['True'], colnames=['Predicted'], margins=True))
+```
+
+Here is the confusion matrix for our algorithm. Across the first row, we see that our specificity is $\frac{3113}{(496+3113)} = 0.863$ Our program correctly identified 86% of the post-1980 homes. It did a lot better recognizing the pre-1980 homes, scoring $\frac{5529}{(369+5529)} = 0.937$ for our Recall score. This means our model is slightly more likely to assume a  <span style="color:blue;">house</span> is unsafe to live in when it likely doesn't have asbestos. I think this is the safer option, because getting a second prediction or an in-person inspector is easier to rectify than the subtle but damaging effects of asbestos inhalation. 
